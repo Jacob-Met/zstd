@@ -722,6 +722,36 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
     }
     DISPLAYLEVEL(3, "OK \n");
 
+    /* A compressed block cannot have zero bytes, even in streaming mode. */
+    DISPLAYLEVEL(3, "test%3i : reject empty compressed blocks in streaming mode : ", testNb++);
+    {
+        static const BYTE malformed[][16] = {
+            { 0x28, 0xB5, 0x2F, 0xFD, 0x04, 0x00, 0x05, 0x00, 0x00, 0x99, 0xE9, 0xD8, 0x51 },
+            { 0x28, 0xB5, 0x2F, 0xFD, 0x24, 0x00, 0x05, 0x00, 0x00, 0x99, 0xE9, 0xD8, 0x51 },
+            { 0x28, 0xB5, 0x2F, 0xFD, 0x24, 0x00, 0x04, 0x00, 0x00, 0x01, 0x00, 0x00, 0x99, 0xE9, 0xD8, 0x51 }
+        };
+        static const size_t malformedSizes[] = { 13, 13, 16 };
+        ZSTD_DCtx* dctx = ZSTD_createDCtx();
+        size_t frame;
+        CHECK(dctx == NULL, "ZSTD_createDCtx failed");
+        for (frame = 0; frame < sizeof(malformedSizes) / sizeof(malformedSizes[0]); ++frame) {
+            size_t r = 1;
+            size_t i;
+            CHECK_Z(ZSTD_DCtx_reset(dctx, ZSTD_reset_session_only));
+            for (i = 0; i < malformedSizes[frame]; ++i) {
+                ZSTD_inBuffer input = { malformed[frame] + i, 1, 0 };
+                ZSTD_outBuffer output = { decodedBuffer, decodedBufferSize, 0 };
+                r = ZSTD_decompressStream(dctx, &output, &input);
+                if (ZSTD_isError(r)) break;
+                CHECK(input.pos != 1, "Streaming decoder failed to consume input");
+            }
+            CHECK(ZSTD_getErrorCode(r) != ZSTD_error_corruption_detected,
+                  "Streaming decoder accepted an empty compressed block (case %u)", (unsigned)frame);
+        }
+        ZSTD_freeDCtx(dctx);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
     DISPLAYLEVEL(3, "test%3i : maxBlockSize = 2KB : ", testNb++);
     {
         ZSTD_DCtx* dctx = ZSTD_createDCtx();
