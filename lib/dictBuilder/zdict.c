@@ -899,9 +899,11 @@ size_t ZDICT_finalizeDictionary(void* dictBuffer, size_t dictBufferCapacity,
         hSize += eSize;
     }
 
-    /* Shrink the content size if it doesn't fit in the buffer */
+    /* Keep the end of the content, which is cheapest to reference. */
     if (hSize + dictContentSize > dictBufferCapacity) {
-        dictContentSize = dictBufferCapacity - hSize;
+        size_t const excess = hSize + dictContentSize - dictBufferCapacity;
+        customDictContent = (BYTE const*)customDictContent + excess;
+        dictContentSize -= excess;
     }
 
     /* Pad the dictionary content with zeros if it is too small */

@@ -4756,7 +4756,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
         {   size_t const dictCapacity = 16 KB;
             void* const coverDict = malloc(dictCapacity);
             unsigned const dValues[2] = { 8, 16 };  /* COVER_cmp8() and COVER_cmp() */
-            XXH64_hash_t const expectedHash[2] = { 0x77EB0C1D595FF7A3ULL, 0xE02EC0FD3A5BBF6DULL };
+            /* Hashes include trailing-content retention in finalization. */
+            XXH64_hash_t const expectedHash[2] = { 0xEB65A69F477627E9ULL, 0xDEE361B685E0019BULL };
             unsigned dIdx;
             if (coverDict==NULL) goto _output_error;
             RDG_genBuffer(decodedBuffer, totalSampleSize, 0.5, 0.05, 1);  /* low-entropy: many repeated dmers */
@@ -4781,6 +4782,39 @@ static int basicUnitTests(U32 const seed, double compressibility)
                 }
             }
             free(coverDict);
+        }
+        DISPLAYLEVEL(3, "OK \n");
+
+        DISPLAYLEVEL(3, "test%3i : finalized dictionary retains trailing content : ", testNb++);
+        {
+            BYTE content[101], sampleBuffer[8 * 1024], resultBuffer[256], overlappingBuffer[256];
+            size_t sizes[8], resultSize, overlapSize, headerSize, keptSize;
+            ZDICT_params_t zParams = { 0, 0, 32768 };
+            size_t i, j;
+            for (i = 0; i < sizeof(content); ++i)
+                content[i] = (BYTE)(i * 37 + 11);
+            for (i = 0; i < 8; ++i) {
+                sizes[i] = 1024;
+                for (j = 0; j < 1024; ++j)
+                    sampleBuffer[i * 1024 + j] = (BYTE)(32 + ((j * 7 + i * 13) % 95));
+            }
+            resultSize = ZDICT_finalizeDictionary(resultBuffer, sizeof(resultBuffer),
+                                                  content, sizeof(content), sampleBuffer,
+                                                  sizes, 8, zParams);
+            CHECK(!ZDICT_isError(resultSize));
+            headerSize = ZDICT_getDictHeaderSize(resultBuffer, resultSize);
+            CHECK(!ZDICT_isError(headerSize) && headerSize <= resultSize);
+            keptSize = resultSize - headerSize;
+            CHECK(keptSize < sizeof(content));
+            CHECK(memcmp(resultBuffer + headerSize, content + sizeof(content) - keptSize,
+                         keptSize) == 0);
+            memset(overlappingBuffer, 0, sizeof(overlappingBuffer));
+            memcpy(overlappingBuffer + 130, content, sizeof(content));
+            overlapSize = ZDICT_finalizeDictionary(overlappingBuffer, sizeof(overlappingBuffer),
+                                                   overlappingBuffer + 130, sizeof(content),
+                                                   sampleBuffer, sizes, 8, zParams);
+            CHECK(!ZDICT_isError(overlapSize) && overlapSize == resultSize);
+            CHECK(memcmp(overlappingBuffer, resultBuffer, resultSize) == 0);
         }
         DISPLAYLEVEL(3, "OK \n");
 
