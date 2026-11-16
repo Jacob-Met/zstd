@@ -1348,6 +1348,8 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
                 return 0;
             }
             /* empty block */
+            RETURN_ERROR_IF(bp.blockType == bt_compressed, corruption_detected,
+                            "Compressed_Block with Block_Size 0");
             if (bp.lastBlock) {
                 if (dctx->fParams.checksumFlag) {
                     dctx->expected = 4;
