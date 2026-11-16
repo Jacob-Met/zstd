@@ -397,6 +397,18 @@ static BMK_benchOutcome_t BMK_benchOutcome_setValidResult(
 }
 
 /* benchMem with no allocation */
+/* The benchmark can spend time in compression, decompression, or both.
+ * Show progress of the work actually requested rather than only elapsed time. */
+static unsigned BMK_getProgress(const BMK_timedFnState_t* compress,
+                                const BMK_timedFnState_t* decompress,
+                                BMK_mode_t mode)
+{
+    if (mode == BMK_decodeOnly) return BMK_progress_TimedFn(decompress);
+    if (mode == BMK_compressOnly) return BMK_progress_TimedFn(compress);
+    return (BMK_progress_TimedFn(compress)
+            + BMK_progress_TimedFn(decompress)) / 2;
+}
+
 static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
         const void** srcPtrs,
         size_t* srcSizes,
@@ -590,11 +602,12 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
         dctxprep.dictBuffer     = dictBuffer;
         dctxprep.dictBufferSize = dictBufferSize;
 
-        OUTPUTLEVEL(2, "\r%70s\r", ""); /* blank line */
+        OUTPUTLEVEL(2, "\r%80s\r", ""); /* blank line */
         assert(srcSize < UINT_MAX);
         OUTPUTLEVEL(
                 2,
-                "%2s-%-17.17s :%10u -> \r",
+                "[%3u%%] %2s-%-17.17s :%10u -> \r",
+                BMK_getProgress(timeStateCompress, timeStateDecompress, adv->mode),
                 marks[markNb],
                 displayName,
                 (unsigned)srcSize);
@@ -628,7 +641,8 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                     assert(cSize < UINT_MAX);
                     OUTPUTLEVEL(
                             2,
-                            "%2s-%-17.17s :%10u ->%10u (x%5.*f), %6.*f MB/s \r",
+                            "[%3u%%] %2s-%-17.17s :%10u ->%10u (x%5.*f), %6.*f MB/s \r",
+                            BMK_getProgress(timeStateCompress, timeStateDecompress, adv->mode),
                             marks[markNb],
                             displayName,
                             (unsigned)srcSize,
@@ -663,7 +677,8 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                     int const ratioDigits = 1 + (ratio < 100.) + (ratio < 10.);
                     OUTPUTLEVEL(
                             2,
-                            "%2s-%-17.17s :%10u ->%10u (x%5.*f), %6.*f MB/s, %6.1f MB/s\r",
+                            "[%3u%%] %2s-%-17.17s :%10u ->%10u (x%5.*f), %6.*f MB/s, %6.1f MB/s\r",
+                            BMK_getProgress(timeStateCompress, timeStateDecompress, adv->mode),
                             marks[markNb],
                             displayName,
                             (unsigned)srcSize,
@@ -961,6 +976,8 @@ static int BMK_benchCLevels(
                (unsigned)(adv->chunkSizeMax >> 10));
 
     for (level = startCLevel; level <= endCLevel; level++) {
+        OUTPUTLEVEL(2, "Benchmark level %d/%d (-%d)\n",
+                    level - startCLevel + 1, endCLevel - startCLevel + 1, level);
         BMK_benchOutcome_t res = BMK_benchMemAdvanced(
             srcBuffer,
             benchedSize,

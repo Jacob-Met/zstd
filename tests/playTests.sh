@@ -1369,6 +1369,14 @@ datagen > tmp1
 zstd -bi0 tmp1
 println "bench multiple levels"
 zstd -i0b0e3 tmp1
+println "benchmark level and elapsed progress"
+zstd -i0b1e2 tmp1 > tmpbenchprogress
+grep -Fq 'Benchmark level 1/2 (-1)' tmpbenchprogress || die "benchmark missing first level"
+grep -Fq 'Benchmark level 2/2 (-2)' tmpbenchprogress || die "benchmark missing second level"
+grep -Eq '\[[[:space:]]*[0-9]+%\]' tmpbenchprogress || die "benchmark missing progress percentage"
+zstd -qi0b1e2 tmp1 > tmpbenchquiet
+! grep -Fq 'Benchmark level' tmpbenchquiet || die "quiet benchmark changed its output"
+rm tmpbenchprogress tmpbenchquiet
 println "bench negative level"
 zstd -bi0 --fast tmp1
 println "with recursive and quiet modes"

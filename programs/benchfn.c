@@ -203,6 +203,13 @@ int BMK_isCompleted_TimedFn(const BMK_timedFnState_t* timedFnState)
     return (timedFnState->timeSpent_ns >= timedFnState->timeBudget_ns);
 }
 
+unsigned BMK_progress_TimedFn(const BMK_timedFnState_t* timedFnState)
+{
+    if (BMK_isCompleted_TimedFn(timedFnState)) return 100;
+    return (unsigned)(100.0 * (double)timedFnState->timeSpent_ns
+                      / (double)timedFnState->timeBudget_ns);
+}
+
 
 #undef MIN
 #define MIN(a,b)   ( (a) < (b) ? (a) : (b) )

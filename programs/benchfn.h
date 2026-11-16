@@ -145,6 +145,9 @@ BMK_runOutcome_t BMK_benchTimedFn(BMK_timedFnState_t* timedFnState,
  */
 int BMK_isCompleted_TimedFn(const BMK_timedFnState_t* timedFnState);
 
+/* Percentage of the total benchmark duration spent so far, capped at 100. */
+unsigned BMK_progress_TimedFn(const BMK_timedFnState_t* timedFnState);
+
 /* BMK_createTimedFnState() and BMK_resetTimedFnState() :
  * Create/Set BMK_timedFnState_t for next benchmark session,
  * which shall last a minimum of total_ms milliseconds,
