@@ -1347,6 +1347,9 @@ size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, c
                 dctx->stage = bp.lastBlock ? ZSTDds_decompressLastBlock : ZSTDds_decompressBlock;
                 return 0;
             }
+            /* A compressed block must contain a literals and sequences header. */
+            RETURN_ERROR_IF(bp.blockType == bt_compressed, corruption_detected,
+                            "Compressed_Block with Block_Size 0");
             /* empty block */
             if (bp.lastBlock) {
                 if (dctx->fParams.checksumFlag) {

@@ -722,6 +722,48 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
     }
     DISPLAYLEVEL(3, "OK \n");
 
+    /* A compressed block cannot have zero payload bytes: even the literals
+     * section requires a header. Streaming must reject these malformed frames
+     * regardless of frame size metadata or input chunking. */
+    DISPLAYLEVEL(3, "test%3i : reject empty compressed blocks : ", testNb++);
+    {
+        static const BYTE invalidFrames[3][16] = {
+            { 0x28, 0xb5, 0x2f, 0xfd, 0x04, 0x00, 0x05, 0x00, 0x00,
+              0x99, 0xe9, 0xd8, 0x51 },
+            { 0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x00, 0x05, 0x00, 0x00,
+              0x99, 0xe9, 0xd8, 0x51 },
+            { 0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x00, 0x04, 0x00, 0x00,
+              0x01, 0x00, 0x00, 0x99, 0xe9, 0xd8, 0x51 }
+        };
+        static const size_t invalidSizes[3] = { 13, 13, 16 };
+        unsigned frameNo;
+        for (frameNo = 0; frameNo < 3; ++frameNo) {
+            unsigned chunked;
+            for (chunked = 0; chunked < 2; ++chunked) {
+                ZSTD_DCtx* const dctx = ZSTD_createDCtx();
+                ZSTD_inBuffer input = { invalidFrames[frameNo],
+                                        chunked ? 0 : invalidSizes[frameNo], 0 };
+                ZSTD_outBuffer output = { decodedBuffer, decodedBufferSize, 0 };
+                size_t r = 1;
+                unsigned step;
+                CHECK(dctx == NULL, "failed to allocate DCtx");
+                for (step = 0; step < 100; ++step) {
+                    if (chunked && input.pos == input.size && input.size < invalidSizes[frameNo])
+                        ++input.size;
+                    r = ZSTD_decompressStream(dctx, &output, &input);
+                    if (ZSTD_isError(r) || r == 0) break;
+                }
+                CHECK(!ZSTD_isError(r), "empty compressed block accepted (frame %u, chunked %u)",
+                      frameNo, chunked);
+                CHECK(ZSTD_getErrorCode(r) != ZSTD_error_corruption_detected,
+                      "wrong error for empty compressed block (frame %u, chunked %u)",
+                      frameNo, chunked);
+                ZSTD_freeDCtx(dctx);
+            }
+        }
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
     DISPLAYLEVEL(3, "test%3i : maxBlockSize = 2KB : ", testNb++);
     {
         ZSTD_DCtx* dctx = ZSTD_createDCtx();
