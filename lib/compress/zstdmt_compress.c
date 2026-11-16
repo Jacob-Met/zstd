@@ -972,7 +972,8 @@ MEM_STATIC ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced_internal(unsigned nbWorkers, 
       mtctx->providedFactory = 1;
     }
     else {
-      mtctx->factory = POOL_create_advanced(nbWorkers, 0, cMem);
+      /* Queue jobs while workers wake up, rather than blocking after each submission. */
+      mtctx->factory = POOL_create_advanced(nbWorkers, nbWorkers, cMem);
       mtctx->providedFactory = 0;
     }
     mtctx->jobs = ZSTDMT_createJobsTable(&nbJobs, cMem);
