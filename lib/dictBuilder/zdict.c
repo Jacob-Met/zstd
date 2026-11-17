@@ -872,6 +872,7 @@ size_t ZDICT_finalizeDictionary(void* dictBuffer, size_t dictBufferCapacity,
     /* The final dictionary content must be at least as large as the largest repcode */
     size_t const minContentSize = (size_t)ZDICT_maxRep(repStartValue);
     size_t paddingSize;
+    const BYTE* retainedContent = (const BYTE*)customDictContent;
 
     /* check conditions */
     DEBUGLOG(4, "ZDICT_finalizeDictionary");
@@ -899,9 +900,11 @@ size_t ZDICT_finalizeDictionary(void* dictBuffer, size_t dictBufferCapacity,
         hSize += eSize;
     }
 
-    /* Shrink the content size if it doesn't fit in the buffer */
+    /* Retain the suffix: its offsets are cheapest to reference after the header. */
     if (hSize + dictContentSize > dictBufferCapacity) {
-        dictContentSize = dictBufferCapacity - hSize;
+        size_t const retainedSize = dictBufferCapacity - hSize;
+        retainedContent += dictContentSize - retainedSize;
+        dictContentSize = retainedSize;
     }
 
     /* Pad the dictionary content with zeros if it is too small */
@@ -932,7 +935,7 @@ size_t ZDICT_finalizeDictionary(void* dictBuffer, size_t dictBufferCapacity,
          * do this before any other writes into the output buffer.
          * Then copy the header & padding into the output buffer.
          */
-        memmove(outDictContent, customDictContent, dictContentSize);
+        memmove(outDictContent, retainedContent, dictContentSize);
         memcpy(outDictHeader, header, hSize);
         memset(outDictPadding, 0, paddingSize);
 

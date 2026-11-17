@@ -5079,7 +5079,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
         {   size_t const dictCapacity = 16 KB;
             void* const coverDict = malloc(dictCapacity);
             unsigned const dValues[2] = { 8, 16 };  /* COVER_cmp8() and COVER_cmp() */
-            XXH64_hash_t const expectedHash[2] = { 0x77EB0C1D595FF7A3ULL, 0xE02EC0FD3A5BBF6DULL };
+            XXH64_hash_t const expectedHash[2] = { 0xEB65A69F477627E9ULL, 0xDEE361B685E0019BULL };
             unsigned dIdx;
             if (coverDict==NULL) goto _output_error;
             RDG_genBuffer(decodedBuffer, totalSampleSize, 0.5, 0.05, 1);  /* low-entropy: many repeated dmers */
@@ -5149,6 +5149,46 @@ static int basicUnitTests(U32 const seed, double compressibility)
                 free(expected);
                 if (!ok) goto _output_error;
             }
+        }
+        DISPLAYLEVEL(3, "OK \n");
+
+        DISPLAYLEVEL(3, "test%3i : dictionary finalizer retains suffix under capacity pressure : ", testNb++);
+        {   BYTE content[101], samples[8 * 1024], separate[512], overlapping[512];
+            size_t sizes[8];
+            ZDICT_params_t params = { 0, 0, 32768 };
+            size_t result, header, retained, inPlaceResult;
+            unsigned i, j;
+            for (i = 0; i < sizeof(content); ++i)
+                content[i] = (BYTE)(i * 37 + 11);
+            for (i = 0; i < 8; ++i) {
+                sizes[i] = 1024;
+                for (j = 0; j < 1024; ++j)
+                    samples[i * 1024 + j] = (BYTE)(32 + ((j * 7 + i * 13) % 95));
+            }
+            result = ZDICT_finalizeDictionary(separate, 256, content, sizeof(content),
+                                             samples, sizes, 8, params);
+            if (ZDICT_isError(result)) goto _output_error;
+            header = ZDICT_getDictHeaderSize(separate, result);
+            if (ZDICT_isError(header) || header >= result) goto _output_error;
+            retained = result - header;
+            if (retained >= sizeof(content)) goto _output_error; /* This must truncate. */
+            if (memcmp(separate + header, content + sizeof(content) - retained, retained))
+                goto _output_error;
+
+            /* The source may overlap the output, including the bytes being moved. */
+            memcpy(overlapping + 150, content, sizeof(content));
+            inPlaceResult = ZDICT_finalizeDictionary(overlapping, 256, overlapping + 150,
+                                                     sizeof(content), samples, sizes, 8, params);
+            if (ZDICT_isError(inPlaceResult) || inPlaceResult != result
+             || memcmp(overlapping, separate, result)) goto _output_error;
+
+            /* Without truncation, all input bytes must still be retained. */
+            result = ZDICT_finalizeDictionary(separate, sizeof(separate), content, sizeof(content),
+                                             samples, sizes, 8, params);
+            if (ZDICT_isError(result)) goto _output_error;
+            header = ZDICT_getDictHeaderSize(separate, result);
+            if (ZDICT_isError(header) || result - header != sizeof(content)
+             || memcmp(separate + header, content, sizeof(content))) goto _output_error;
         }
         DISPLAYLEVEL(3, "OK \n");
 
