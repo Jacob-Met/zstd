@@ -972,7 +972,11 @@ MEM_STATIC ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced_internal(unsigned nbWorkers, 
       mtctx->providedFactory = 1;
     }
     else {
-      mtctx->factory = POOL_create_advanced(nbWorkers, 0, cMem);
+      /* Keep small jobs queued while workers wake up. With no queue, a
+       * failed POOL_tryAdd() stalls input until the oldest job completes,
+       * even though the job table has room for more work. The job table
+       * already bounds the number of outstanding jobs. */
+      mtctx->factory = POOL_create_advanced(nbWorkers, nbWorkers, cMem);
       mtctx->providedFactory = 0;
     }
     mtctx->jobs = ZSTDMT_createJobsTable(&nbJobs, cMem);

@@ -1627,6 +1627,45 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
     }
     DISPLAYLEVEL(3, "OK \n");
 
+#ifdef ZSTD_MULTITHREAD
+    /* Short jobs must remain correct when the producer gets ahead of the
+     * worker threads, including across repeated frames and session resets.
+     * This covers the bounded pending-job queue added for small workloads. */
+    DISPLAYLEVEL(3, "test%3i : multiple queued compression jobs and context reuse : ", testNb++);
+    {   unsigned const workers[] = { 1, 4, 8 };
+        size_t const jobSizes[] = { 512 KB, 1 MB };
+        size_t const srcSizes[] = { 2 MB + 71, 8 MB + 511, 1 MB + 15 };
+        unsigned wi, ji, fi;
+        for (wi = 0; wi < sizeof(workers) / sizeof(workers[0]); wi++) {
+            for (ji = 0; ji < sizeof(jobSizes) / sizeof(jobSizes[0]); ji++) {
+                ZSTD_CCtx* const cctx = ZSTD_createCCtx();
+                CHECK(cctx == NULL, "failed to create context for queued-job test");
+                CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, -4));
+                CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, (int)workers[wi]));
+                CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_jobSize, (int)jobSizes[ji]));
+                CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_overlapLog, 4));
+                CHECK_Z(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1));
+                for (fi = 0; fi < sizeof(srcSizes) / sizeof(srcSizes[0]); fi++) {
+                    size_t const srcSize = srcSizes[fi];
+                    BYTE const* const src = (const BYTE*)CNBuffer + fi;
+                    size_t const bound = ZSTD_compressBound(srcSize);
+                    size_t const compressedSize = ZSTD_compress2(cctx, compressedBuffer, bound, src, srcSize);
+                    size_t decodedSize;
+                    CHECK_Z(compressedSize);
+                    decodedSize = ZSTD_decompress(decodedBuffer, decodedBufferSize,
+                                                  compressedBuffer, compressedSize);
+                    CHECK_Z(decodedSize);
+                    CHECK(decodedSize != srcSize || memcmp(src, decodedBuffer, srcSize) != 0,
+                          "queued-job round-trip mismatch");
+                    if (fi == 1) CHECK_Z(ZSTD_CCtx_reset(cctx, ZSTD_reset_session_only));
+                }
+                ZSTD_freeCCtx(cctx);
+            }
+        }
+    }
+    DISPLAYLEVEL(3, "OK \n");
+#endif
+
     /* Complex multithreading + dictionary test */
     {   U32 const nbWorkers = 2;
         size_t const jobSize = 4 * 1 MB;
